@@ -20,6 +20,7 @@ const HexIcon = ({ size = 40, letter = "N", fontSize = 16 }) => (
     >
       <polygon points="20,2 36,11 36,29 20,38 4,29 4,11" fill="#F5C400" />
     </svg>
+
     <span
       style={{
         position: "relative",
@@ -37,6 +38,7 @@ const HexIcon = ({ size = 40, letter = "N", fontSize = 16 }) => (
 const TypingIndicator = () => (
   <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
     <HexIcon size={30} fontSize={11} />
+
     <div
       style={{
         padding: "13px 17px",
@@ -65,7 +67,7 @@ const TypingIndicator = () => (
   </div>
 );
 
-const ProductCard = ({ product, onCotizar }) => (
+const ProductCard = ({ product }) => (
   <div
     style={{
       background: "#151515",
@@ -157,36 +159,10 @@ const ProductCard = ({ product, onCotizar }) => (
         </div>
       )}
     </div>
-
-    <div
-      style={{
-        borderTop: "0.5px solid #1a1a1a",
-        padding: "12px 18px",
-        display: "flex",
-        gap: 8,
-      }}
-    >
-      <button
-        onClick={() => onCotizar(product)}
-        style={{
-          flex: 1.4,
-          border: "none",
-          background: "#F5C400",
-          color: "#1a0f00",
-          borderRadius: 10,
-          padding: 10,
-          fontSize: 12,
-          fontWeight: 500,
-          cursor: "pointer",
-        }}
-      >
-        Solicitar cotización
-      </button>
-    </div>
   </div>
 );
 
-const Message = ({ msg, onCotizar }) => {
+const Message = ({ msg }) => {
   const isUser = msg.role === "user";
 
   return (
@@ -276,7 +252,7 @@ const Message = ({ msg, onCotizar }) => {
       {msg.productos?.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {msg.productos.slice(0, 3).map((p, i) => (
-            <ProductCard key={i} product={p} onCotizar={onCotizar} />
+            <ProductCard key={i} product={p} />
           ))}
         </div>
       )}
@@ -378,7 +354,6 @@ export default function App() {
   const uploadAttachment = async (file) => {
     const formData = new FormData();
 
-    // Ajusta el nombre del campo si tu backend usa otro.
     formData.append("archivo", file);
 
     const res = await fetch(`${API_URL}/upload-archivo`, {
@@ -398,9 +373,7 @@ export default function App() {
     const normalizedMeta = {
       archivo_nombre: data.archivo_nombre || data.nombre_original || file.name,
       archivo_tipo:
-        data.archivo_tipo ||
-        data.tipo_entrada ||
-        detectAttachmentType(file),
+        data.archivo_tipo || data.tipo_entrada || detectAttachmentType(file),
       archivo_ruta: data.archivo_ruta || data.ruta || "",
       archivo_mimetype: data.archivo_mimetype || file.type || "",
     };
@@ -447,10 +420,7 @@ export default function App() {
 
     if (loading || uploadingFile) return;
 
-    // Si no hay texto pero sí hay archivo adjunto, usamos un texto base
-    // para no romper la validación del backend.
-    const messageToSend =
-      trimmedText || (fileMeta ? "Adjunto archivo" : "");
+    const messageToSend = trimmedText || (fileMeta ? "Adjunto archivo" : "");
 
     if (!messageToSend) return;
 
@@ -475,8 +445,6 @@ export default function App() {
         cliente_id: "anonimo",
       };
 
-      // Si existe archivo cargado, lo enviamos al backend
-      // para que chat.py lo procese con la capa multimodal.
       if (fileMeta?.archivo_ruta) {
         payload.archivo_nombre = fileMeta.archivo_nombre;
         payload.archivo_tipo = fileMeta.archivo_tipo;
@@ -492,7 +460,9 @@ export default function App() {
 
       const data = await res.json();
 
-      if (data.session_id) setSessionId(data.session_id);
+      if (data.session_id) {
+        setSessionId(data.session_id);
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -505,9 +475,10 @@ export default function App() {
         },
       ]);
 
-      // Limpiamos el adjunto después de enviar exitosamente.
       clearAttachment();
     } catch (e) {
+      console.error(e);
+
       setMessages((prev) => [
         ...prev,
         {
@@ -522,16 +493,19 @@ export default function App() {
     }
   };
 
-  const handleCotizar = (product) => {
-    sendMessage(`Quiero cotizar: ${product.nombre} (Código: ${product.codigo})`);
-  };
-
-  const chips = ["Válvulas neumáticas", "Rodamientos", "Bombas", "Sensores", "Cables"];
+  const chips = [
+    "Válvulas neumáticas",
+    "Rodamientos",
+    "Bombas",
+    "Sensores",
+    "Cables",
+  ];
 
   return (
     <>
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
           background: #0a0a0a;
           display: flex;
@@ -540,10 +514,18 @@ export default function App() {
           min-height: 100vh;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
+
         @keyframes tp {
-          0%,60%,100%{opacity:.3;transform:translateY(0)}
-          30%{opacity:1;transform:translateY(-2px)}
+          0%,60%,100% {
+            opacity: .3;
+            transform: translateY(0);
+          }
+          30% {
+            opacity: 1;
+            transform: translateY(-2px);
+          }
         }
+
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: #111; }
         ::-webkit-scrollbar-thumb { background: #222; border-radius: 2px; }
@@ -578,10 +560,12 @@ export default function App() {
           }}
         >
           <HexIcon size={40} fontSize={16} />
+
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 500, color: "#f0f0f0" }}>
               NIA
             </div>
+
             <div
               style={{
                 fontSize: 11,
@@ -603,6 +587,7 @@ export default function App() {
               Disponible ahora
             </div>
           </div>
+
           <div style={{ fontSize: 11, color: "#383838" }}>VIA Industrial</div>
         </div>
 
@@ -619,7 +604,6 @@ export default function App() {
             position: "relative",
           }}
         >
-          {/* WELCOME */}
           {messages.length === 0 && (
             <div
               style={{
@@ -631,11 +615,13 @@ export default function App() {
               }}
             >
               <HexIcon size={62} letter="N" fontSize={22} />
+
               <div
                 style={{ fontSize: 18, fontWeight: 500, color: "#f0f0f0" }}
               >
                 Hola, soy NIA
               </div>
+
               <div
                 style={{
                   fontSize: 13,
@@ -648,6 +634,7 @@ export default function App() {
                 Asesora comercial de VIA Industrial. Cuéntame qué producto
                 necesitas.
               </div>
+
               <div
                 style={{
                   display: "flex",
@@ -689,12 +676,10 @@ export default function App() {
             </div>
           )}
 
-          {/* MESSAGES */}
           {messages.map((msg, i) => (
-            <Message key={i} msg={msg} onCotizar={handleCotizar} />
+            <Message key={i} msg={msg} />
           ))}
 
-          {/* TYPING */}
           {loading && <TypingIndicator />}
 
           <div ref={bottomRef} />
@@ -772,6 +757,7 @@ export default function App() {
                 >
                   {selectedFile?.name || "Archivo adjunto"}
                 </div>
+
                 <div style={{ fontSize: 10, color: "#555", marginTop: 2 }}>
                   {selectedFile
                     ? `${selectedFile.type || "archivo"} · ${formatFileSize(
@@ -779,11 +765,13 @@ export default function App() {
                       )}`
                     : "Preparando archivo..."}
                 </div>
+
                 {uploadingFile && (
                   <div style={{ fontSize: 10, color: "#F5C400", marginTop: 3 }}>
                     Subiendo archivo...
                   </div>
                 )}
+
                 {uploadError && (
                   <div style={{ fontSize: 10, color: "#f87171", marginTop: 3 }}>
                     {uploadError}
@@ -822,7 +810,6 @@ export default function App() {
             flexShrink: 0,
           }}
         >
-          {/* Botón adjuntar archivo */}
           <button
             onClick={() => fileInputRef.current?.click()}
             style={{
@@ -842,7 +829,14 @@ export default function App() {
             disabled={loading || uploadingFile}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="#F5C400">
-              <path d="M16.5 6.5V17a4.5 4.5 0 1 1-9 0V6.25a3.25 3.25 0 0 1 6.5 0V16a2 2 0 1 1-4 0V7.5" stroke="#F5C400" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              <path
+                d="M16.5 6.5V17a4.5 4.5 0 1 1-9 0V6.25a3.25 3.25 0 0 1 6.5 0V16a2 2 0 1 1-4 0V7.5"
+                stroke="#F5C400"
+                strokeWidth="1.6"
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </button>
 
