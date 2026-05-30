@@ -573,15 +573,28 @@ export default function App() {
         setSessionId(data.session_id);
         saveFrontendSessionId(data.session_id);
       }
+      const assistantResponse =
+        data.respuesta ||
+        "No pude generar una respuesta en este momento. Intenta nuevamente.";
+
+      const normalizedAssistantResponse = assistantResponse
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+
+      const shouldShowProducts =
+        normalizedAssistantResponse.includes("encontre el producto exacto") ||
+        normalizedAssistantResponse.includes("encontre varias opciones") ||
+        normalizedAssistantResponse.includes("te muestro las mejores") ||
+        normalizedAssistantResponse.includes("opciones relevantes");
+
 
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content:
-            data.respuesta ||
-            "No pude generar una respuesta en este momento. Intenta nuevamente.",
-          productos: data.productos || [],
+          content: assistantResponse,
+          productos: shouldShowProducts ? data.productos || [] : [],
           requiere_accion: data.requiere_accion,
           commercial_handoff: data.commercial_handoff || null,
           time: now(),
