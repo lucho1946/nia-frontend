@@ -1,6 +1,75 @@
 import { useState, useRef, useEffect } from "react";
 
-const API_URL = "http://127.0.0.1:8000";
+// ============================================================
+// CONFIGURACIÓN API NIA
+// ============================================================
+// Para pruebas públicas, el frontend debe apuntar al backend
+// productivo de Azure, no a localhost.
+const API_URL = (
+  process.env.REACT_APP_API_BASE_URL ||
+  "https://nia-api-productos.azurewebsites.net"
+).replace(/\/$/, "");
+
+// ============================================================
+// CLIENTE WEB DE PRUEBAS
+// ============================================================
+// Genera un identificador estable por navegador.
+// Esto nos permite rastrear pruebas del frontend sin pedir login.
+const getFrontendClientId = () => {
+  const storageKey = "nia_frontend_client_id";
+
+  try {
+    const existingClientId = window.localStorage.getItem(storageKey);
+
+    if (existingClientId) {
+      return existingClientId;
+    }
+
+    const newClientId =
+      typeof window !== "undefined" &&
+      window.crypto &&
+      window.crypto.randomUUID
+        ? `web_${window.crypto.randomUUID()}`
+        : `web_${Date.now()}`;
+
+    window.localStorage.setItem(storageKey, newClientId);
+
+    return newClientId;
+  } catch (error) {
+    return `web_${Date.now()}`;
+  }
+};
+
+// ============================================================
+// SESIÓN WEB DE NIA
+// ============================================================
+// Guardamos session_id también en localStorage para que, si el navegador
+// refresca durante una prueba, NIA pueda conservar continuidad.
+const getInitialSessionId = () => {
+  try {
+    return window.localStorage.getItem("nia_frontend_session_id") || null;
+  } catch (error) {
+    return null;
+  }
+};
+
+const saveFrontendSessionId = (sessionId) => {
+  if (!sessionId) return;
+
+  try {
+    window.localStorage.setItem("nia_frontend_session_id", sessionId);
+  } catch (error) {
+    // No bloqueamos el chat si localStorage falla.
+  }
+};
+
+const clearFrontendSessionId = () => {
+  try {
+    window.localStorage.removeItem("nia_frontend_session_id");
+  } catch (error) {
+    // No bloqueamos el chat si localStorage falla.
+  }
+};
 
 const HexIcon = ({ size = 40, letter = "N", fontSize = 16 }) => (
   <div
@@ -216,6 +285,7 @@ const Message = ({ msg }) => {
                 ? "16px 4px 16px 16px"
                 : "4px 16px 16px 16px",
               border: isUser ? "none" : "0.5px solid #222",
+              whiteSpace: "pre-wrap",
             }}
           >
             {msg.content}
@@ -304,7 +374,11 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sessionId, setSessionId] = useState(null);
+
+  // La sesión se mantiene en state, ref y localStorage.
+  // El ref evita que el segundo mensaje salga con session_id viejo/null.
+  const [sessionId, setSessionId] = useState(getInitialSessionId);
+  const sessionIdRef = useRef(getInitialSessionId());
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [fileMeta, setFileMeta] = useState(null);
@@ -324,6 +398,14 @@ export default function App() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+
+    if (sessionId) {
+      saveFrontendSessionId(sessionId);
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     if (!selectedFile) {
@@ -415,6 +497,15 @@ export default function App() {
     }
   };
 
+  const resetConversation = () => {
+    setMessages([]);
+    setInput("");
+    setSessionId(null);
+    sessionIdRef.current = null;
+    clearFrontendSessionId();
+    clearAttachment();
+  };
+
   const sendMessage = async (text) => {
     const trimmedText = text.trim();
 
@@ -423,6 +514,8 @@ export default function App() {
     const messageToSend = trimmedText || (fileMeta ? "Adjunto archivo" : "");
 
     if (!messageToSend) return;
+
+    const currentSessionId = sessionIdRef.current || sessionId || null;
 
     setMessages((prev) => [
       ...prev,
@@ -440,9 +533,9 @@ export default function App() {
     try {
       const payload = {
         mensaje: messageToSend,
-        session_id: sessionId,
+        session_id: currentSessionId,
         canal: "web",
-        cliente_id: "anonimo",
+        cliente_id: getFrontendClientId(),
       };
 
       if (fileMeta?.archivo_ruta) {
@@ -452,25 +545,45 @@ export default function App() {
         payload.archivo_mimetype = fileMeta.archivo_mimetype;
       }
 
+      if (process.env.NODE_ENV !== "production") {
+        console.log("NIA CHAT PAYLOAD:", payload);
+      }
+
       const res = await fetch(`${API_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(
+          `Error API NIA: ${res.status} - ${errorText || "sin detalle"}`
+        );
+      }
+
       const data = await res.json();
 
+      if (process.env.NODE_ENV !== "production") {
+        console.log("NIA CHAT RESPONSE:", data);
+      }
+
       if (data.session_id) {
+        sessionIdRef.current = data.session_id;
         setSessionId(data.session_id);
+        saveFrontendSessionId(data.session_id);
       }
 
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content: data.respuesta,
+          content:
+            data.respuesta ||
+            "No pude generar una respuesta en este momento. Intenta nuevamente.",
           productos: data.productos || [],
           requiere_accion: data.requiere_accion,
+          commercial_handoff: data.commercial_handoff || null,
           time: now(),
         },
       ]);
@@ -484,7 +597,7 @@ export default function App() {
         {
           role: "assistant",
           content:
-            "Error conectando con NIA. Verifica que el servidor esté activo.",
+            "Error conectando con NIA. Verifica que el servidor esté activo o vuelve a intentarlo.",
           time: now(),
         },
       ]);
@@ -587,6 +700,23 @@ export default function App() {
               Disponible ahora
             </div>
           </div>
+
+          <button
+            onClick={resetConversation}
+            style={{
+              background: "transparent",
+              border: "0.5px solid #222",
+              color: "#555",
+              borderRadius: 10,
+              padding: "7px 10px",
+              fontSize: 11,
+              cursor: "pointer",
+              marginRight: 8,
+            }}
+            title="Iniciar nueva conversación"
+          >
+            Nuevo
+          </button>
 
           <div style={{ fontSize: 11, color: "#383838" }}>VIA Industrial</div>
         </div>
@@ -821,7 +951,7 @@ export default function App() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              cursor: "pointer",
+              cursor: loading || uploadingFile ? "not-allowed" : "pointer",
               flexShrink: 0,
               transition: "all 0.15s",
             }}
