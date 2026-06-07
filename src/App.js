@@ -7,7 +7,7 @@ import { useState, useRef, useEffect } from "react";
 // productivo de Azure, no a localhost.
 const API_URL = (
   process.env.REACT_APP_API_BASE_URL ||
-  "https://nia-api-productos.azurewebsites.net"
+  "https://nia-v365-fmchdchabudbb4h4.canadacentral-01.azurewebsites.net"
 ).replace(/\/$/, "");
 
 // ============================================================
@@ -515,7 +515,14 @@ export default function App() {
 
     if (!messageToSend) return;
 
-    const currentSessionId = sessionIdRef.current || sessionId || null;
+    const currentSessionId =
+      sessionIdRef.current ||
+      sessionId ||
+      `web_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+
+    sessionIdRef.current = currentSessionId;
+    setSessionId(currentSessionId);
+    saveFrontendSessionId(currentSessionId);
 
     setMessages((prev) => [
       ...prev,
@@ -532,10 +539,9 @@ export default function App() {
 
     try {
       const payload = {
-        mensaje: messageToSend,
         session_id: currentSessionId,
-        canal: "web",
-        cliente_id: getFrontendClientId(),
+        phone_id: getFrontendClientId(),
+        mensaje: messageToSend,
       };
 
       if (fileMeta?.archivo_ruta) {
@@ -549,7 +555,7 @@ export default function App() {
         console.log("NIA CHAT PAYLOAD:", payload);
       }
 
-      const res = await fetch(`${API_URL}/chat`, {
+      const res = await fetch(`${API_URL}/nia/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
